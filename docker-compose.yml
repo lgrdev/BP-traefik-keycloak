@@ -1,0 +1,45 @@
+networks:
+  traefik_proxy:
+    external: true
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0.5
+    container_name: keycloak
+    restart: always
+    command: start
+    environment:
+      KC_PROXY_ADDRESS_FORWARDING: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY: edge
+      KC_HTTP_ENABLED: "true"
+      KC_DB: ${KC_DB}
+      KC_DB_URL: ${KC_DB_URL}
+      KC_DB_USERNAME: ${KC_DB_USERNAME}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_HOSTNAME: ${KC_HOSTNAME}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: true
+      TZ: 'Europe/Paris'
+    healthcheck:
+      test: ['CMD-SHELL', '[ -f /tmp/HealthCheck.java ] || echo "public class HealthCheck { public static void main(String[] args) throws java.lang.Throwable { System.exit(java.net.HttpURLConnection.HTTP_OK == ((java.net.HttpURLConnection)new java.net.URL(args[0]).openConnection()).getResponseCode() ? 0 : 1); } }" > /tmp/HealthCheck.java && java /tmp/HealthCheck.java http://localhost:8080/health/live']
+      interval: 1m
+      timeout: 5s
+      retries: 3 
+    volumes:
+      - /keycloak/import:/opt/keycloak/data/import   
+    networks:
+      - traefik_proxy
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=traefik_proxy'
+      - 'traefik.http.routers.keycloak.entrypoints=websecure'
+      - 'traefik.tcp.routers.keycloak.middlewares=hsts-headers@file'
+      - 'traefik.http.routers.keycloak.middlewares=webSecureByIp@file'
+      - "traefik.http.routers.keycloak.rule=Host(`${URL_KEYCLOAK}`)"
+      - 'traefik.http.routers.keycloak.tls.certresolver=lets-encrypt'
+      - 'traefik.http.routers.keycloak.tls.options=mintls12@file'
+      - "traefik.http.routers.keycloak.tls=true"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+
